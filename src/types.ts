@@ -16,6 +16,7 @@ export interface RegistryMetadata {
   daysSinceRelease: number;
   maintainerCount: number;
   hasBreakingKeyword: boolean;
+  deprecated: string | null;
   releaseNotes: string | null;
   repositoryUrl: string | null;
 }
@@ -41,8 +42,10 @@ export interface AnalysisResult {
   review: AnalyzedPackage[];
   manual: AnalyzedPackage[];
   skipped: string[];
+  excludedDevCount: number;
   totalCount: number;
   analyzedAt: Date;
+  packageManager: string;
 }
 
 export interface SafeUpgradeConfig {
@@ -50,6 +53,7 @@ export interface SafeUpgradeConfig {
   githubToken?: string;
   registryUrl?: string;
   includeDevDependencies?: boolean;
+  filter?: RiskLevel[];
   jsonOutput?: boolean;
   apply?: boolean;
   dryRun?: boolean;

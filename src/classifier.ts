@@ -24,6 +24,11 @@ export function classify(ctx: ClassificationContext): AnalyzedPackage {
     return { update, risk: "manual", reasons, metadata, advisories };
   }
 
+  if (metadata?.deprecated !== null && metadata?.deprecated !== undefined) {
+    reasons.push(`package is deprecated: ${metadata.deprecated.slice(0, 80)}`);
+    return { update, risk: "manual", reasons, metadata, advisories };
+  }
+
   let score = baseScore(update.semverChange);
 
   if (update.kind === "dev") {

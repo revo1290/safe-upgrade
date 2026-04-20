@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import semver from "semver";
 import { classify } from "./classifier.js";
+import { detectPackageManager, getPackageManagerCommands } from "./packageManager.js";
 import { fetchRegistryMetadata, fetchSecurityAdvisories } from "./registry.js";
 import type {
   AnalysisResult,
@@ -14,19 +15,35 @@ import type {
 
 const CONCURRENCY = 5;
 
-export async function analyze(cwd: string, config: SafeUpgradeConfig): Promise<AnalysisResult> {
+export type ProgressCallback = (done: number, total: number) => void;
+
+export async function analyze(
+  cwd: string,
+  config: SafeUpgradeConfig,
+  onProgress?: ProgressCallback,
+): Promise<AnalysisResult> {
   const packageJsonPath = resolve(cwd, "package.json");
   if (!existsSync(packageJsonPath)) {
     throw new Error(`No package.json found in ${cwd}`);
   }
 
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as Record<string, unknown>;
+  const pm = detectPackageManager(cwd);
+  const pmCommands = getPackageManagerCommands(pm, config.registryUrl);
 
-  const outdated = getOutdated(cwd, config.registryUrl);
+  if (!pmCommands.supported) {
+    throw new Error(
+      `${pm} does not support JSON-formatted outdated output yet. ` +
+        `Run \`npm outdated\` or \`pnpm outdated\` instead, or set packageManager to npm/pnpm.`,
+    );
+  }
+
+  const outdated = getOutdated(cwd, pmCommands.cmd, pmCommands.args, pm);
   const ignoreSet = new Set(config.ignore ?? []);
 
   const updates: PackageUpdate[] = [];
   const skipped: string[] = [];
+  let excludedDevCount = 0;
 
   for (const [name, entry] of Object.entries(outdated)) {
     if (ignoreSet.has(name)) {
@@ -41,6 +58,7 @@ export async function analyze(cwd: string, config: SafeUpgradeConfig): Promise<A
     const kind = resolveDependencyKind(name, packageJson);
 
     if (!config.includeDevDependencies && kind === "dev") {
+      excludedDevCount++;
       continue;
     }
 
@@ -55,11 +73,14 @@ export async function analyze(cwd: string, config: SafeUpgradeConfig): Promise<A
     });
   }
 
+  let done = 0;
   const analyzed = await processInBatches(updates, CONCURRENCY, async (update) => {
     const [metadata, advisories] = await Promise.all([
       fetchRegistryMetadata(update.name, update.latest, config.githubToken),
       fetchSecurityAdvisories(update.name),
     ]);
+    done++;
+    onProgress?.(done, updates.length);
     return classify({ update, metadata, advisories });
   });
 
@@ -68,8 +89,10 @@ export async function analyze(cwd: string, config: SafeUpgradeConfig): Promise<A
     review: [],
     manual: [],
     skipped,
+    excludedDevCount,
     totalCount: updates.length,
     analyzedAt: new Date(),
+    packageManager: pm,
   };
 
   for (const pkg of analyzed) {
@@ -79,28 +102,96 @@ export async function analyze(cwd: string, config: SafeUpgradeConfig): Promise<A
   return result;
 }
 
-function getOutdated(cwd: string, registryUrl?: string): Record<string, NpmOutdatedEntry> {
-  const args = ["outdated", "--json"];
-  if (registryUrl) args.push("--registry", registryUrl);
+function getOutdated(
+  cwd: string,
+  cmd: string,
+  args: string[],
+  pm: string,
+): Record<string, NpmOutdatedEntry> {
   try {
-    const output = execFileSync("npm", args, {
+    const output = execFileSync(cmd, args, {
       cwd,
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 60_000,
       env: { ...process.env },
     });
-    return JSON.parse(output.toString()) as Record<string, NpmOutdatedEntry>;
+    return parseOutdatedOutput(output.toString(), pm);
   } catch (err) {
     const error = err as { stdout?: Buffer };
     if (error.stdout && error.stdout.length > 0) {
       try {
-        return JSON.parse(error.stdout.toString()) as Record<string, NpmOutdatedEntry>;
+        return parseOutdatedOutput(error.stdout.toString(), pm);
       } catch {
         return {};
       }
     }
     return {};
   }
+}
+
+function parseOutdatedOutput(raw: string, pm: string): Record<string, NpmOutdatedEntry> {
+  const data = JSON.parse(raw) as unknown;
+
+  if (pm === "yarn" && Array.isArray(data)) {
+    return parseYarnOutdated(data);
+  }
+
+  if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>;
+
+    if ("dependencies" in obj || "devDependencies" in obj) {
+      return parsePnpmOutdated(obj);
+    }
+
+    return data as Record<string, NpmOutdatedEntry>;
+  }
+
+  return {};
+}
+
+function parsePnpmOutdated(data: Record<string, unknown>): Record<string, NpmOutdatedEntry> {
+  const result: Record<string, NpmOutdatedEntry> = {};
+  const sections = ["dependencies", "devDependencies", "optionalDependencies"] as const;
+
+  for (const section of sections) {
+    const sectionData = data[section];
+    if (typeof sectionData !== "object" || sectionData === null) continue;
+
+    for (const [name, entry] of Object.entries(sectionData as Record<string, unknown>)) {
+      const e = entry as Record<string, string>;
+      if (e.current && e.latest) {
+        result[name] = {
+          current: e.current,
+          wanted: e.wanted ?? e.latest,
+          latest: e.latest,
+          dependent: name,
+        };
+      }
+    }
+  }
+
+  return result;
+}
+
+function parseYarnOutdated(lines: unknown[]): Record<string, NpmOutdatedEntry> {
+  const result: Record<string, NpmOutdatedEntry> = {};
+
+  for (const line of lines) {
+    if (typeof line !== "object" || line === null) continue;
+    const l = line as Record<string, unknown>;
+    if (l.type !== "table") continue;
+
+    const tableData = l.data as { body?: unknown[][] } | undefined;
+    for (const row of tableData?.body ?? []) {
+      if (!Array.isArray(row) || row.length < 4) continue;
+      const [name, current, wanted, latest] = row as string[];
+      if (name && current && latest) {
+        result[name] = { current, wanted: wanted ?? latest, latest, dependent: name };
+      }
+    }
+  }
+
+  return result;
 }
 
 function resolveDependencyKind(name: string, packageJson: Record<string, unknown>): DependencyKind {

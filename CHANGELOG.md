@@ -1,5 +1,11 @@
 # safe-upgrade
 
+## 1.0.0
+
+### Major Changes
+
+- init
+
 ## 0.1.0
 
 ### Features

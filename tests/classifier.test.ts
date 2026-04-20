@@ -17,6 +17,7 @@ const baseMetadata = (overrides: Partial<RegistryMetadata> = {}): RegistryMetada
   daysSinceRelease: 30,
   maintainerCount: 2,
   hasBreakingKeyword: false,
+  deprecated: null,
   releaseNotes: null,
   repositoryUrl: null,
   ...overrides,
@@ -103,6 +104,16 @@ describe("classify", () => {
       advisories: [],
     });
     expect(result.reasons).toContain("very recent release (<7 days old)");
+  });
+
+  it("raises risk for deprecated packages", () => {
+    const result = classify({
+      update: baseUpdate({ semverChange: "patch" }),
+      metadata: baseMetadata({ deprecated: "Use new-package instead" }),
+      advisories: [],
+    });
+    expect(result.risk).toBe("manual");
+    expect(result.reasons.some((r) => r.includes("deprecated"))).toBe(true);
   });
 
   it("handles missing metadata gracefully", () => {

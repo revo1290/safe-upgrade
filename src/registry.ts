@@ -92,6 +92,10 @@ export async function fetchRegistryMetadata(
         ? (((downloadsData.value as Record<string, unknown>).downloads as number) ?? 0)
         : 0;
 
+    const versions = registry.versions as Record<string, Record<string, unknown>> | undefined;
+    const versionData = versions?.[version];
+    const deprecated = typeof versionData?.deprecated === "string" ? versionData.deprecated : null;
+
     const repositoryUrl = extractRepositoryUrl(registry);
     const releaseNotes = await fetchReleaseNotes(repositoryUrl, version, githubToken);
     const hasBreakingKeyword = detectBreakingChanges(releaseNotes ?? "");
@@ -101,6 +105,7 @@ export async function fetchRegistryMetadata(
       daysSinceRelease,
       maintainerCount,
       hasBreakingKeyword,
+      deprecated,
       releaseNotes,
       repositoryUrl,
     };

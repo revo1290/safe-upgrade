@@ -1,6 +1,6 @@
 {
   "name": "safe-upgrade",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Classify npm dependency updates by risk level — safe, review, or manual",
   "keywords": [
     "npm",
