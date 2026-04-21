@@ -40,7 +40,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "safe-upgrade": "./dist/cli.js"
+    "safe-upgrade": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -82,7 +82,6 @@
     "node": ">=18.0.0"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }
