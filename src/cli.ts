@@ -45,14 +45,9 @@ program
         process.exit(1);
       }
 
-      if (options.apply && options.dryRun) {
-        console.error("Error: --apply and --dry-run cannot be used together");
-        process.exit(1);
-      }
-
       const filter = parseFilter(options.filter);
       if (options.filter && filter.length === 0) {
-        console.error(`Error: --filter must be one or more of: safe, review, manual`);
+        console.error("Error: --filter must be one or more of: safe, review, manual");
         process.exit(1);
       }
 

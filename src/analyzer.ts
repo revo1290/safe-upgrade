@@ -33,8 +33,7 @@ export async function analyze(
 
   if (!pmCommands.supported) {
     throw new Error(
-      `${pm} does not support JSON-formatted outdated output yet. ` +
-        `Run \`npm outdated\` or \`pnpm outdated\` instead, or set packageManager to npm/pnpm.`,
+      `${pm} does not support JSON-formatted outdated output yet. Run \`npm outdated\` or \`pnpm outdated\` instead, or set packageManager to npm/pnpm.`,
     );
   }
 

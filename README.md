@@ -49,7 +49,10 @@ npx safe-upgrade
 # Auto-apply safe updates
 npx safe-upgrade --apply
 
-# Preview what --apply would do
+# Preview what --apply would do (without making changes)
+npx safe-upgrade --dry-run
+
+# Preview with --apply flag explicit
 npx safe-upgrade --apply --dry-run
 
 # CI-friendly JSON output (exits 1 if manual packages exist)
@@ -133,4 +136,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md). Security issues: see [SECURITY.md](./S
 
 ## License
 
-MIT © YOUR_NAME
+MIT © revo1290
